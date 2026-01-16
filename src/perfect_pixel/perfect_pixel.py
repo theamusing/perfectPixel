@@ -172,6 +172,39 @@ def sample_majority(image, x_coords, y_coords, max_samples=128, iters=6, seed=42
         return np.clip(np.rint(out), 0, 255).astype(np.uint8)
     return out
 
+def sample_median(image, x_coords, y_coords):
+    img = image.astype(np.float32) if image.dtype != np.float32 else image
+    H, W = img.shape[:2]
+    if img.ndim == 2:
+        img = img[..., None]
+    C = img.shape[2]
+
+    x = np.asarray(x_coords, dtype=np.int32)
+    y = np.asarray(y_coords, dtype=np.int32)
+
+    nx, ny = len(x) - 1, len(y) - 1
+    out = np.empty((ny, nx, C), dtype=np.float32)
+    
+    for j in range(ny):
+        y0, y1 = int(y[j]), int(y[j + 1])
+        y0 = np.clip(y0, 0, H); y1 = np.clip(y1, 0, H)
+        if y1 <= y0: y1 = min(y0 + 1, H)
+
+        for i in range(nx):
+            x0, x1 = int(x[i]), int(x[i + 1])
+            x0 = np.clip(x0, 0, W); x1 = np.clip(x1, 0, W)
+            if x1 <= x0: x1 = min(x0 + 1, W)
+
+            cell = img[y0:y1, x0:x1].reshape(-1, C)
+            if cell.shape[0] == 0:
+                out[j, i] = 0
+            else:
+                out[j, i] = np.median(cell, axis=0)
+
+    if image.dtype == np.uint8:
+        return np.clip(np.rint(out), 0, 255).astype(np.uint8)
+    return out
+
 def refine_grids(image, grid_x, grid_y, refine_intensity=0.25):
     H, W = image.shape[:2]
     x_coords = []
@@ -332,21 +365,25 @@ def grid_layout(image, x_coords, y_coords, scale_x, scale_y):
         plt.axhline(y=y, linewidth=0.6)
     plt.show()
 
-def get_perfect_pixel(image, sample_method="center", grid_size = None, min_size = 4.0, peak_width = 6, refine_intensity = 0.25, fix_square = True, debug=False):
+def get_perfect_pixel(image, sample_method="center", grid_size = None, min_size = 4.0, peak_width = 6, refine_intensity = 0.25, fix_square = True, preprocess_denoise=True, debug=False):
     """
     Args:
         image: RGB Image (H * W * 3)
-        sample_method: "majority" or "center"
+        sample_method: "majority", "center", or "median"
         grid_size: Manually set grid size (grid_w, grid_h) to override auto-detection
         min_size: Minimum pixel size to consider valid
         peak_width: Minimum peak width for peak detection.
         refine_intensity: Intensity for grid line refinement. Recommended range is [0, 0.5]. Given original estimated grid line at x, the refinement will search in [x * (1 - refine_intensity), x * (1 + refine_intensity)].
         fix_square: Whether to enforce output to be square when detected image is almost square.
+        preprocess_denoise: Whether to apply Bilateral Filter before sampling. Greatly helps with noise.
         debug: Whether to show debug plots.
 
     returns: 
         refined_w, refined_h, scaled_image
     """
+    if preprocess_denoise:
+        image = cv2.bilateralFilter(image, 9, 75, 75)
+
     H, W = image.shape[:2]
     if grid_size is not None:
         # use provided grid size
@@ -364,12 +401,13 @@ def get_perfect_pixel(image, sample_method="center", grid_size = None, min_size 
     refined_size_x = len(x_coords) - 1
     refined_size_y = len(y_coords) - 1
 
-    # sample by majority
+    # sample
     if sample_method == "majority":
         scaled_image = sample_majority(image, x_coords, y_coords)
-
-    # sample by center
+    elif sample_method == "median":
+        scaled_image = sample_median(image, x_coords, y_coords)
     else:
+        # sample by center
         scaled_image = sample_center(image, x_coords, y_coords)
 
     # fix square

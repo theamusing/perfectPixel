@@ -12,3 +12,9 @@ output/
 *.log
 
 .DS_Store
+output.png
+scaled_output.png
+src/perfect_pixel/__pycache__/__init__.cpython-313.pyc
+src/perfect_pixel/__pycache__/perfect_pixel_noCV2.cpython-313.pyc
+src/perfect_pixel/__pycache__/perfect_pixel.cpython-313.pyc
+.gitignore
