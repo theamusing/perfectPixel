@@ -268,7 +268,12 @@ def estimate_grid_fft(gray, peak_width=6):
     scale_row = detect_peak(row_sum, peak_width)
     scale_col = detect_peak(col_sum, peak_width)
 
-    if scale_row is None or scale_col is None or scale_col <= 0:
+    if (
+        scale_row is None
+        or scale_col is None
+        or scale_row <= 0
+        or scale_col <= 0
+    ):
         return None, None
 
     grid_w = int(round(scale_col))
@@ -365,7 +370,7 @@ def grid_layout(image, x_coords, y_coords, scale_x, scale_y):
         plt.axhline(y=y, linewidth=0.6)
     plt.show()
 
-def get_perfect_pixel(image, sample_method="center", grid_size = None, min_size = 4.0, peak_width = 6, refine_intensity = 0.25, fix_square = True, preprocess_denoise=True, debug=False):
+def get_perfect_pixel(image, sample_method="center", grid_size = None, min_size = 4.0, peak_width = 6, refine_intensity = 0.25, fix_square = True, preprocess_denoise=True, bilateral_d=9, bilateral_sigma_color=75, bilateral_sigma_space=75, debug=False):
     """
     Args:
         image: RGB Image (H * W * 3)
@@ -375,14 +380,17 @@ def get_perfect_pixel(image, sample_method="center", grid_size = None, min_size 
         peak_width: Minimum peak width for peak detection.
         refine_intensity: Intensity for grid line refinement. Recommended range is [0, 0.5]. Given original estimated grid line at x, the refinement will search in [x * (1 - refine_intensity), x * (1 + refine_intensity)].
         fix_square: Whether to enforce output to be square when detected image is almost square.
-        preprocess_denoise: Whether to apply Bilateral Filter before sampling. Greatly helps with noise.
+        preprocess_denoise: Whether to apply a bilateral filter before sampling. Greatly helps with noise. Note: The filtered image is used for both detection and sampling, but the original input image array passed to this function is not modified in-place.
+        bilateral_d: Diameter of each pixel neighborhood that is used during filtering.
+        bilateral_sigma_color: Filter sigma in the color space.
+        bilateral_sigma_space: Filter sigma in the coordinate space.
         debug: Whether to show debug plots.
 
     returns: 
         refined_w, refined_h, scaled_image
     """
     if preprocess_denoise:
-        image = cv2.bilateralFilter(image, 9, 75, 75)
+        image = cv2.bilateralFilter(image, bilateral_d, bilateral_sigma_color, bilateral_sigma_space)
 
     H, W = image.shape[:2]
     if grid_size is not None:

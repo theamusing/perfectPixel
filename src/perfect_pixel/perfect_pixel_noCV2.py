@@ -306,7 +306,7 @@ def refine_grids(image, grid_x, grid_y, refine_intensity=0.25):
     return x_coords, y_coords
 
 def estimate_grid_fft(gray, peak_width=6):
-    """Return (grid_w, grid_h) or None."""
+    """Return (grid_w, grid_h) or (None, None)."""
     H, W = gray.shape
 
     mag = compute_fft_magnitude(gray)
@@ -326,7 +326,7 @@ def estimate_grid_fft(gray, peak_width=6):
     scale_col = detect_peak(col_sum, peak_width=peak_width)
 
     if scale_row is None or scale_col is None or scale_col <= 0:
-        return None
+        return None, None
 
     return scale_col, scale_row
 
@@ -419,7 +419,7 @@ def grid_layout(image, x_coords, y_coords, scale_x, scale_y):
         plt.axhline(y=y, linewidth=0.6)
     plt.show()
 
-def get_perfect_pixel(image, sample_method="center", grid_size = None, min_size = 4.0, peak_width = 6, refine_intensity = 0.25, fix_square = True, debug=False):
+def get_perfect_pixel(image, sample_method="center", grid_size = None, min_size = 4.0, peak_width = 6, refine_intensity = 0.25, fix_square = True, preprocess_denoise=False, debug=False):
     """
     Args:
         image: RGB ndArray (H * W * 3)
@@ -429,11 +429,28 @@ def get_perfect_pixel(image, sample_method="center", grid_size = None, min_size 
         peak_width: Minimum peak width for peak detection.
         refine_intensity: Intensity for grid line refinement. Recommended range is [0, 0.5]. Given original estimated grid line at x, the refinement will search in [x * (1 - refine_intensity), x * (1 + refine_intensity)].
         fix_square: Whether to enforce output to be square when detected image is almost square.
+        preprocess_denoise: Whether to apply simple denoising (smoothing) before processing. Note: This only modifies the internal copy used for detection and sampling; the original input image array is not changed in-place.
         debug: Whether to show debug plots.
 
     returns: 
         refined_w, refined_h, scaled_image
     """
+    if preprocess_denoise:
+        # Simple Gaussian smoothing
+        k_smooth = np.array([[1, 2, 1], [2, 4, 2], [1, 2, 1]], dtype=np.float32) / 16.0
+        is_uint8 = (image.dtype == np.uint8)
+        
+        if image.ndim == 3:
+            chans = []
+            for c in range(image.shape[2]):
+                chans.append(conv2d_same(image[..., c], k_smooth))
+            image = np.stack(chans, axis=2)
+        else:
+            image = conv2d_same(image, k_smooth)
+
+        if is_uint8:
+            image = np.clip(image, 0, 255).astype(np.uint8)
+
     H, W = image.shape[:2]
     if grid_size is not None:
         # use provided grid size
